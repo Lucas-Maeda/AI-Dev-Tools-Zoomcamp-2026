@@ -1,1002 +1,1447 @@
 # Simplified Stiffened Panel Analysis Tool
 
-## Consolidated Brainstorming and MVP Scope
+## Self-Contained MVP Scope and Engineering Basis
 
-This document consolidates the full project brainstorming conducted so far. It records the agreed scope, modeling assumptions, inputs, calculation workflow, user-interface behavior, results, validation rules, reporting requirements, and unresolved technical points.
+This document consolidates the complete project scope and embeds the engineering equations needed to understand and implement the tool without access to the original course PDF.
 
----
-
-## 1. Project Vision
-
-The project will be a **simplified stiffened-panel analysis tool** aimed at engineers performing preliminary or educational aerospace structural calculations.
-
-The tool is not intended to be a general finite element solver. The engineer should draw a conceptual panel layout, define a small set of properties, loads, and supports, and obtain transparent analytical results.
-
-The primary purposes are:
-
-1. Calculate the global shear-flow distribution in the idealized panel.
-2. Plot the normal-load diagram for a structural boundary selected by the user.
-3. Perform bay-by-bay buckling verification using classical analytical equations and predefined curves of buckling coefficient \(K\) versus aspect ratio \(a/b\).
-4. Calculate the maximum admissible external load for a selected bay when the solution is uniquely defined.
-5. Export a complete engineering calculation report in PDF format.
-
-A future secondary purpose may be to support quick trade-off studies between alternative panel configurations, but optimization and automated design suggestions are outside the MVP.
+> **Engineering limitation:** This is a simplified linear-elastic pre-buckling model. The application must not be treated as a certification-level solver without independent verification, validated curve data, test cases, and engineering review.
 
 ---
 
-## 2. Core Philosophy
+## 1. Project objective
 
-The tool should behave like a **simplified aerospace structures calculator and analysis workbench**, not like an FEM preprocessor.
+Build a graphical engineering tool for simplified analysis of flat stiffened panels. The engineer draws the panel layout, defines dimensions, material, thickness, supports, external nodal loads, and the applicable buckling curve for every bay. The software then:
 
-The engineer should think:
+1. detects the panel bays and connectivity;
+2. solves the global shear-flow distribution;
+3. plots the normal-load diagram for a selected boundary/stiffener;
+4. evaluates elastic shear buckling for each rectangular bay;
+5. calculates a bay-specific critical external load when a unique scalar solution exists;
+6. exports a full engineering PDF report.
 
-> “I am drawing my conceptual panel and obtaining understandable engineering results.”
-
-The engineer should not need to think about:
-
-- finite element meshes;
-- element formulations;
-- node and connectivity tables;
-- nonlinear solution controls;
-- contact;
-- local stress concentrations;
-- detailed stress recovery.
-
-The calculations should be fast, explainable, traceable, and compatible with hand-calculation methods.
+A later phase may support trade-off studies, but optimization is excluded from the MVP.
 
 ---
 
-## 3. Intended Structural Idealization
+## 2. Product identity
 
-### 3.1 Boom-skin concept
+The product is a **simplified aircraft-style panel analysis workbench**.
 
-The selected analytical philosophy is a **boom-skin idealization** suitable for simplified aircraft-style panel calculations.
+It is not:
 
-For the MVP:
+- a general finite element solver;
+- a mesh generator;
+- a nonlinear solver;
+- a detailed stress-recovery tool;
+- a stiffener sizing or crippling tool;
+- a post-buckling solver.
+
+The intended experience is: “draw a conceptual panel and obtain transparent analytical results.”
+
+---
+
+## 3. Structural idealization
+
+### 3.1 Skin
+
+The skin is the thin sheet forming each rectangular bay. In the MVP, the skin carries the shear flow.
+
+### 3.2 Boundaries or stiffeners
+
+Every line drawn around or inside the panel is treated as a structural boundary/stiffener. These lines subdivide the skin into bays.
+
+MVP stiffeners are geometric entities only. They do not have:
+
+- area `A`;
+- moment of inertia `I`;
+- section shape;
+- separate material;
+- Euler buckling calculation;
+- crippling calculation.
+
+### 3.3 Analytical philosophy
+
+The agreed concept is a simplified boom-skin style idealization:
 
 - the skin carries shear flow;
-- boundary lines act as idealized stiffeners or supporting members;
-- normal-load diagrams are obtained from geometry, supports, external loads, global equilibrium, and shear-flow equilibrium;
-- the boundary lines do not require physical section properties;
-- no detailed stiffener-strength or stiffener-buckling calculation is performed.
-
-### 3.2 Meaning of skin and stiffener
-
-- **Skin:** the thin plate or sheet forming each rectangular bay.
-- **Stiffener/boundary:** the line surrounding or dividing the skin bays.
-
-The skin is not the stiffener.
-
-### 3.3 Stiffener representation
-
-In the MVP, the stiffeners are **geometric boundaries only**.
-
-They have:
-
-- a start vertex;
-- an end vertex;
-- a position in the panel layout.
-
-They do not have:
-
-- cross-sectional area \(A\);
-- moment of inertia \(I\);
-- a separate material;
-- Euler buckling checks;
-- crippling checks.
-
-Every line drawn as part of the panel layout is automatically treated as a stiffener or structural boundary.
+- global equilibrium determines load transfer;
+- normal forces along boundaries are reconstructed from equilibrium with the adjacent shear flows;
+- the boundaries are assumed sufficiently rigid for the pre-buckling idealization.
 
 ---
 
-## 4. Geometry Definition
+## 4. Geometry input
 
 ### 4.1 What the user draws
 
 The user draws only:
 
-- the external boundary of the complete panel;
-- the internal lines that divide the panel into bays.
+- the outer boundary of the complete panel;
+- internal horizontal or vertical lines that subdivide the panel.
 
-The user does not explicitly create nodes, stiffeners, connectivity, or bays.
+The user does not manually create nodes, connectivity tables, stiffener entities, or bay entities.
 
-### 4.2 What the software detects automatically
+### 4.2 Automatic detection
 
-The software must automatically:
+The software automatically:
 
-- create vertices at endpoints and intersections;
-- determine line connectivity;
-- treat all drawn lines as structural boundaries;
-- detect every closed bay;
-- number bays automatically as `Bay 1`, `Bay 2`, `Bay 3`, and so forth;
-- number the structural boundaries internally, when needed;
-- distinguish outer-boundary vertices from internal intersections.
+- creates vertices at line endpoints and intersections;
+- detects connectivity;
+- identifies outer-boundary and internal vertices;
+- treats every line as a boundary/stiffener;
+- detects every closed rectangular bay;
+- numbers bays automatically as `Bay 1`, `Bay 2`, and so on.
 
 ### 4.3 Geometry restrictions
 
-The MVP supports:
+The MVP permits:
 
-- one connected panel structure per model;
-- rectangular or square bays only;
-- perfectly horizontal and vertical bay boundaries;
-- closed regions only.
+- a single connected structure;
+- rectangular or square bays;
+- horizontal and vertical boundaries only;
+- closed bays only.
 
-The MVP does not support:
+The MVP rejects:
 
-- disconnected panel structures in one project;
-- skewed panels;
-- trapezoidal bays;
-- arbitrary quadrilaterals;
+- multiple disconnected structures;
+- open bays;
+- inclined boundaries;
+- trapezoidal or skewed bays;
 - curved boundaries;
-- open or incomplete bays.
+- arbitrary quadrilaterals.
 
-### 4.4 Bay dimensions
+### 4.4 Dimensions
 
-After the software detects the bays, the user must enter, for each bay:
+For every detected bay, the user enters:
 
-- width \(b\);
-- height \(a\).
+- width;
+- height.
 
-The dimensions are not inferred from the apparent scale of the sketch.
+The dimensions are not inferred from how large the sketch appears on screen.
 
-The software calculates:
+For stability calculations, define:
 
 \[
-\frac{a}{b}
+a_i=\max(\text{width}_i,\text{height}_i)
 \]
 
-for each bay.
+\[
+b_i=\min(\text{width}_i,\text{height}_i)
+\]
 
-### 4.5 Bay naming
+and:
 
-Bay names are generated automatically only:
+\[
+\boxed{r_i=\frac{a_i}{b_i}\geq 1}
+\]
 
-- Bay 1;
-- Bay 2;
-- Bay 3;
-- etc.
+Thus, `a` is the longer bay dimension and `b` is the shorter bay dimension.
 
-Custom bay names are outside the MVP.
+### 4.5 Naming
+
+Bay names are automatic only. Custom names are outside the MVP.
 
 ---
 
-## 5. Material and Thickness
+## 5. Material and thickness
 
-### 5.1 Material assignment
+### 5.1 Material
 
-The complete panel uses **one global material**.
+The entire panel uses one global, isotropic, linear-elastic material.
 
-The user may:
+The user can:
 
-- choose a material from a library; or
-- define a custom material.
+- select from a material library; or
+- create a custom material.
 
-The required material properties include:
+Required properties:
 
-- Young’s modulus \(E\);
-- Poisson’s ratio \(\nu\), when required by the final verified buckling formula.
+- Young's modulus `E`;
+- Poisson's ratio `nu`.
 
-Different materials per bay and material zones are outside the MVP.
+The selected buckling-curve convention determines whether `nu` appears explicitly in the final equation.
 
 ### 5.2 Thickness
 
-The complete panel uses **one global skin thickness** \(t\).
+One global skin thickness `t` applies to all bays.
 
-The user enters the thickness once, and the same value applies to every bay.
-
-Different thicknesses per bay and tapered skins are outside the MVP.
+Different thicknesses by bay and tapered skins are outside the MVP.
 
 ---
 
 ## 6. Supports
 
-### 6.1 Available support types
-
-The user assigns supports using familiar support categories:
+Available support types:
 
 - fixed;
 - pinned;
 - roller.
 
-### 6.2 Support location
+Supports may be applied only at vertices on the outer boundary of the complete panel.
 
-Supports may be assigned only to vertices on the **outer boundary of the complete panel**.
+Supports are prohibited at internal intersections.
 
-Supports are not allowed at internal intersections.
+### Hard rule: load-support exclusivity
 
-### 6.3 Load-support exclusivity
+A vertex cannot contain both an external load and any support type. This includes fixed, pinned, and roller supports.
 
-A vertex cannot simultaneously contain an external load and any type of support.
+Suggested error:
 
-This rule applies equally to:
-
-- fixed supports;
-- pinned supports;
-- roller supports.
-
-If a load and support are assigned to the same vertex, the model must be rejected before solving.
-
-Suggested validation message:
-
-> **Validation Error:** A vertex cannot simultaneously contain a support condition and an external load. Remove the load or the support.
+> **Validation error:** A vertex cannot simultaneously contain a support and an external load. Remove the load or the support.
 
 ---
 
-## 7. External Loads
+## 7. External loads
 
 ### 7.1 Number of loads
 
-The user may define as many external loads as required, subject to the location and direction rules below.
+The user may define any number of external loads.
 
-### 7.2 Permitted load location
+### 7.2 Location
 
-External loads may be applied only at vertices on the **outer boundary of the complete panel**.
+Loads may be applied only at vertices on the outer boundary of the complete panel.
 
-External loads are prohibited at:
+Loads are prohibited:
 
-- internal intersections;
-- points in the middle of a boundary line;
-- points in the middle of a stiffener;
-- support vertices.
+- at internal intersections;
+- in the middle of a boundary/stiffener;
+- inside a bay;
+- at any support vertex.
 
-### 7.3 Load definition
+### 7.3 Definition
 
-For each load, the user defines:
+The user defines:
 
-- magnitude;
+- load magnitude;
 - tension or compression;
-- an allowed horizontal or vertical direction when the vertex geometry provides more than one possible direction.
+- horizontal or vertical orientation when both are geometrically possible at a corner.
 
-The load is always normal/perpendicular to the selected external boundary direction.
+The load is normal to the selected outer boundary.
 
-### 7.4 Direction convention
+- Compression points inward toward the panel.
+- Tension points outward away from the panel.
 
-- **Compression:** the arrow points inward, toward the panel structure.
-- **Tension:** the arrow points outward, away from the panel structure.
+### 7.4 Excluded load types
 
-At an outer corner, the user may choose the applicable horizontal or vertical load direction.
+The MVP excludes:
 
-At an internal intersection, no load is permitted, eliminating ambiguity about inward and outward directions.
-
-### 7.5 Excluded load types
-
-The MVP does not support:
-
-- loads applied inside a bay;
-- loads applied along a boundary segment;
-- distributed edge loads;
-- applied moments;
-- loads at internal vertices;
-- arbitrary angled loads.
+- distributed loads;
+- moments;
+- arbitrary angled loads;
+- loads along a segment;
+- internal nodal loads.
 
 ---
 
-## 8. Global Shear-Flow Analysis
+## 8. Units and symbols
 
-### 8.1 Global solution
+Recommended internal unit system:
 
-The tool must solve the **global shear-flow distribution** using:
+- force: N;
+- length: mm;
+- stress and modulus: MPa = N/mm^2;
+- shear flow: N/mm.
 
-- the complete connected geometry;
-- all support conditions;
-- all external nodal loads.
+| Symbol | Meaning | Unit |
+|---|---|---|
+| `a_i` | Longer dimension of Bay i | mm |
+| `b_i` | Shorter dimension of Bay i | mm |
+| `r_i` | Aspect ratio `a_i/b_i` | dimensionless |
+| `t` | Global skin thickness | mm |
+| `E` | Young's modulus | MPa |
+| `nu` | Poisson's ratio | dimensionless |
+| `K_i` | Buckling coefficient | dimensionless |
+| `q_i` | Shear flow in Bay i | N/mm |
+| `tau_i` | Actual shear stress | MPa |
+| `tau_cr,i` | Critical elastic shear-buckling stress | MPa |
+| `U_i` | Buckling utilization | dimensionless |
+| `RF_i` | Buckling reserve factor | dimensionless |
+| `P_j` | External nodal load | N |
+| `P_cr,i` | Bay-specific critical load | N |
+| `N_s(x)` | Normal load along selected boundary | N |
 
-A load may influence bays that do not directly touch the loaded vertex because the structure transfers load globally through equilibrium.
+Unit check:
 
-The tool must not use a purely local load-transfer assumption.
+\[
+\frac{q}{t}=\frac{\mathrm{N/mm}}{\mathrm{mm}}=\mathrm{N/mm^2}=\mathrm{MPa}
+\]
 
-### 8.2 One shear-flow model/value per bay
+---
 
-Each bay has one associated shear-flow result or shear-flow model for the simplified analysis.
+## 9. Global shear-flow analysis
 
-The exact mathematical formulation must be validated against the intended Aula 7 methodology before implementation.
+### 9.1 Global rather than local solution
 
-### 8.3 Automatic mode
+The tool solves shear flow using the complete connected structure, all supports, and all loads. A load may influence bays that do not directly touch the loaded vertex because equilibrium transfers actions through the entire structure.
 
-In automatic mode, the software must:
+### 9.2 Linear form
 
-1. detect the bays and boundaries;
-2. interpret supports and loads;
-3. build the equilibrium equations;
-4. solve for all shear-flow values \(q_i\);
-5. check equilibrium and solution consistency.
+For Bay `i`, the shear-flow response can be represented as:
 
-### 8.4 Detailed-calculation mode
+\[
+q_i=f_i(P_1,P_2,\ldots,P_n)
+\]
 
-The software must also provide an optional control such as:
+Under the linear-elastic assumptions:
+
+\[
+\boxed{q_i=\alpha_{i1}P_1+\alpha_{i2}P_2+\cdots+\alpha_{in}P_n}
+\]
+
+The response coefficients depend on geometry, supports, connectivity, load positions, and load directions.
+
+### 9.3 System of equations
+
+The automatic solver builds an equilibrium system, generically:
+
+\[
+\mathbf{Aq}=\mathbf{b}
+\]
+
+where:
+
+- `q` contains the unknown shear-flow values;
+- `A` represents the equilibrium relationships;
+- `b` represents the applied loads and reactions after the chosen formulation is assembled.
+
+The exact row construction must be validated against known hand calculations. The solver must detect singular, inconsistent, and underdetermined systems.
+
+### 9.4 Automatic and detailed modes
+
+Automatic mode builds and solves the equations.
+
+Optional detailed-calculation mode shows:
+
+- sign conventions;
+- equilibrium equations;
+- intermediate substitutions;
+- support reactions;
+- solved shear flows;
+- residual checks;
+- equations used to build normal-load diagrams.
+
+Suggested control:
 
 ```text
 [ ] Show detailed calculations
 ```
 
-When enabled, the software should display:
+### 9.5 Visualization
 
-- equilibrium equations;
-- sign conventions;
-- intermediate substitutions;
-- solved shear-flow values;
-- equations used to construct normal-load diagrams.
+Display:
 
-This mode is intended for engineering verification, teaching, and comparison with hand calculations.
-
-### 8.5 Shear-flow visualization
-
-The results must show:
-
-- numerical shear-flow values on the relevant boundaries or bays;
-- arrows indicating shear-flow direction;
-- a sign-convention legend explaining positive and negative flow.
-
-The display should not rely on a color contour alone.
+- signed numerical `q` values;
+- arrows showing flow direction;
+- a legend defining positive and negative flow.
 
 ---
 
-## 9. Normal-Load Diagram
+## 10. Actual shear stress
 
-### 9.1 Calculation basis
-
-The normal-load diagram is not entered by the user.
-
-It is calculated solely from:
-
-- geometry;
-- restrictions/supports;
-- external loads;
-- calculated shear-flow distribution;
-- equilibrium along the structural boundary.
-
-No stiffener area, inertia, or material is used in the MVP normal-load calculation.
-
-### 9.2 User interaction
-
-After solving, the user selects which structural boundary/stiffener should be inspected.
-
-The software then plots the normal-load diagram for that selected boundary only.
-
-### 9.3 Normal-load output
-
-For the selected boundary, the tool should show:
-
-- the normal-load function \(N(x)\), potentially piecewise;
-- the plotted normal-load diagram;
-- key values at relevant locations;
-- maximum normal load;
-- minimum normal load;
-- contributing shear-flow terms;
-- detailed equilibrium equations when detailed-calculation mode is enabled.
-
-The visual form should resemble a conventional engineering normal-force diagram, like the reference notebook calculation discussed during brainstorming.
-
----
-
-## 10. Buckling-Curve Interface
-
-### 10.1 Reference chart
-
-The stability module uses a chart containing approximately four curves of:
+For every bay:
 
 \[
-K \;\text{versus}\; a/b
+\boxed{\tau_i=\frac{q_i}{t}}
 \]
 
-The final definitions and exact data for those curves must be taken from and validated against the reference material, particularly Aula 7 from the `PEEA_I` notebook/PDF.
+For comparison with a positive critical magnitude:
 
-### 10.2 Curve selection per bay
+\[
+\boxed{|\tau_i|=\frac{|q_i|}{t}}
+\]
 
-For each bay, the user selects the applicable curve:
+The sign of `q_i` remains visible because the sign indicates direction.
 
-- Curve 1;
-- Curve 2;
-- Curve 3;
-- Curve 4.
+### Physical basis
 
-Each bay may use a different curve.
-
-### 10.3 Proposed UI
-
-The stability screen should contain:
-
-#### Left side
-
-- selected bay dropdown;
-- curve-selection dropdown;
-- short explanation of what the selected curve represents;
-- calculated \(a\), \(b\), and \(a/b\);
-- interpolated \(K\).
-
-#### Right side
-
-- the reference \(K\) versus \(a/b\) chart;
-- all available curves for review;
-- the selected curve highlighted;
-- the current \(a/b\) position marked;
-- the interpolated \(K\) point shown on the graph.
-
-This interface is intended to make the interpolation transparent and allow the engineer to understand why a particular \(K\) value was used.
-
-### 10.4 Curve descriptions
-
-A brief explanation above or beside the chart should state:
-
-- what the graph represents;
-- what the horizontal and vertical axes mean;
-- what each curve represents;
-- when each curve should be selected.
-
-The actual descriptions must be copied or derived accurately from the verified Aula 7 source, not guessed.
+A pure shear state corresponds to principal normal stresses at 45 degrees. One principal stress is tensile and the other is compressive, with magnitudes equal to the shear-stress magnitude. The compressive principal stress drives the plate-buckling behavior. Therefore, the simplified stability check compares `|q|/t` with a critical shear-buckling stress.
 
 ---
 
-## 11. Stability Analysis
+## 11. Relevant elastic stability theory
 
-### 11.1 Bay-centered workflow
+### 11.1 Background from Euler stability
 
-The stability analysis is performed for a bay selected by the user from a dropdown list.
+Elastic buckling of a slender member depends on material stiffness, geometry or slenderness, and support conditions. For thin plates, the same qualitative dependencies remain, but two-dimensional plate behavior and Poisson coupling modify the critical-stress expression.
 
-The selected bay should also be highlighted in the geometry.
+The model is valid for elastic buckling. It does not represent yielding, crushing, plastic buckling, or material failure.
 
-The interface should show:
+### 11.2 General thin-plate convention
 
-- full details for the selected bay; and
-- a compact comparison table for all bays.
-
-### 11.2 Actual shear stress
-
-For bay \(i\), the actual shear stress is calculated from the global shear-flow result:
+A commonly used critical plate stress format is:
 
 \[
-\tau_i = \frac{|q_i|}{t}
+\tau_{cr}=k_s\frac{\pi^2E}{12(1-\nu^2)}\left(\frac{t}{b}\right)^2
 \]
 
-The absolute value may be used for comparison against a positive critical magnitude, while the signed \(q_i\) remains visible in the shear-flow results.
+However, some charts redefine the plotted coefficient so that the constants are incorporated into `K`.
 
-### 11.3 Critical buckling stress
+### 11.3 Equation convention used for this project
 
-The discussed simplified form is:
+The relevant course material presents the shear-buckling equation in the compact form:
 
 \[
-\tau_{cr,i} = K_i E\left(\frac{t}{b_i}\right)^2
+\boxed{\tau_{cr,i}=K_iE\left(\frac{t}{b_i}\right)^2}
+\]
+
+For this project, `K_i` must be the coefficient associated with this exact equation convention.
+
+**Critical implementation rule:** Do not multiply by both the chart coefficient `K` and an extra factor such as `pi^2/[12(1-nu^2)]` unless the curve dataset explicitly uses the alternative `k_s` convention. Otherwise the normalization would be counted twice.
+
+Every embedded curve dataset must state its equation convention.
+
+Dimensional check:
+
+\[
+[K E(t/b)^2]=[E]=\text{stress}
+\]
+
+---
+
+## 12. K versus a/b curves
+
+### 12.1 Purpose
+
+The chart supplies the buckling coefficient as a function of bay aspect ratio:
+
+\[
+\boxed{K=K(a/b)}
+\]
+
+The reference contains four curves representing four typical edge-restraint cases. Greater edge restraint generally produces higher elastic buckling resistance.
+
+### 12.2 User interaction
+
+For every bay, the user selects one applicable curve from a dropdown.
+
+The stability screen contains:
+
+**Left side**
+
+- Bay dropdown;
+- Curve 1, 2, 3, or 4 dropdown;
+- explanation of the selected curve;
+- width and height;
+- normalized `a` and `b`;
+- calculated `a/b`;
+- interpolated `K`.
+
+**Right side**
+
+- the complete `K` versus `a/b` graph;
+- all four curves;
+- selected curve highlighted;
+- vertical marker at the current `a/b`;
+- interpolation point;
+- calculated `K`.
+
+### 12.3 Required embedded data
+
+Because the user will not have the PDF, the software package must contain:
+
+- the meaning of each curve;
+- digitized `(a/b, K)` coordinates;
+- valid range;
+- equation convention;
+- interpolation rule;
+- source/verification note.
+
+The 100-point approximate digitized datasets are embedded in Section 31. Their numerical values are suitable for approximate curve interpolation. The exact physical edge-restraint descriptions of K1 through K4 must still be independently verified before engineering release.
+
+### 12.4 Linear interpolation
+
+Between points `(r1,K1)` and `(r2,K2)`:
+
+\[
+\boxed{K(r)=K_1+\frac{r-r_1}{r_2-r_1}(K_2-K_1)}
+\]
+
+Rules:
+
+1. Return exact tabulated values at exact points.
+2. Show the two interpolation points in detailed mode.
+3. Do not silently extrapolate.
+4. Block or clearly warn when `a/b` is outside the verified curve range.
+5. Plot the interpolation point.
+
+Suggested curve data structure:
+
+```yaml
+curve_id: 1
+display_name: verified edge-restraint description
+equation_convention: tau_cr = K * E * (t/b)^2
+x_variable: a_over_b
+y_variable: K
+valid_range:
+  minimum: verified_value
+  maximum: verified_value
+points:
+  - [ratio_1, K_1]
+  - [ratio_2, K_2]
+verification_note: independently checked digitization
+```
+
+---
+
+## 13. Bay stability calculation
+
+For each Bay `i`:
+
+### Step 1: Normalize dimensions
+
+\[
+a_i=\max(h_i,w_i),\qquad b_i=\min(h_i,w_i)
+\]
+
+### Step 2: Calculate aspect ratio
+
+\[
+r_i=\frac{a_i}{b_i}
+\]
+
+### Step 3: Interpolate coefficient
+
+\[
+K_i=K_{\text{selected curve}}(r_i)
+\]
+
+### Step 4: Calculate critical shear-buckling stress
+
+\[
+\boxed{\tau_{cr,i}=K_iE\left(\frac{t}{b_i}\right)^2}
+\]
+
+### Step 5: Obtain global shear flow
+
+\[
+q_i=f_i(P_1,\ldots,P_n)
+\]
+
+### Step 6: Calculate actual shear stress
+
+\[
+\boxed{\tau_i=\frac{q_i}{t}}
+\]
+
+### Step 7: Calculate utilization
+
+\[
+\boxed{U_i=\frac{|\tau_i|}{\tau_{cr,i}}}
+\]
+
+Interpretation:
+
+- `U_i < 1`: below the idealized elastic buckling limit;
+- `U_i = 1`: at the idealized critical condition;
+- `U_i > 1`: above the idealized elastic buckling limit.
+
+### Step 8: Calculate reserve factor
+
+\[
+\boxed{RF_i=\frac{\tau_{cr,i}}{|\tau_i|}=\frac{1}{U_i}}
+\]
+
+If `q_i=0`, show `Not governing under current load` rather than infinity.
+
+The UI should say “below critical,” “critical,” or “above critical,” not simply “safe” or “failed,” because this simplified calculation does not include all real failure mechanisms.
+
+---
+
+## 14. Load-to-bay association
+
+A load is associated with a bay when the load is applied at an outer-boundary vertex belonging to that bay.
+
+If a loaded vertex belongs to two adjacent bays, the load is associated with both bays. The two bays may produce different critical-load values because the bays may have different:
+
+- shear flow;
+- dimensions;
+- aspect ratio;
+- selected curve;
+- `K` coefficient;
+- critical stress.
+
+This geometric association rule determines whether a unique scalar critical-load calculation is allowed. It does not limit the global influence of a load in the shear-flow solution.
+
+---
+
+## 15. Maximum external load for one bay
+
+### 15.1 Eligibility
+
+The program calculates a scalar maximum external load for the selected bay only if exactly one external load is associated with that bay.
+
+### 15.2 General linear relation
+
+For one associated variable load `P`:
+
+\[
+\boxed{q_i(P)=\alpha_iP+q_{i,0}}
 \]
 
 where:
 
-- \(K_i\) is interpolated from the selected curve;
-- \(E\) is the global Young’s modulus;
-- \(t\) is the global skin thickness;
-- \(b_i\) is the bay width.
+- `alpha_i` is the response coefficient for the selected load;
+- `q_i,0` is the shear-flow contribution from any other globally acting loads not geometrically associated with the bay.
 
-**Important:** the exact equation, constants, dimensional convention, possible dependence on \(\nu\), and whether the chart represents shear buckling or compression buckling must be verified against Aula 7 before coding.
-
-### 11.4 Required results for every selected bay
-
-The stability module always displays:
-
-- bay identifier;
-- width \(b\);
-- height \(a\);
-- aspect ratio \(a/b\);
-- selected curve;
-- interpolated \(K\);
-- shear flow \(q\);
-- actual stress \(\tau=q/t\);
-- critical buckling stress \(\tau_{cr}\);
-- utilization.
-
-The utilization is:
+The critical condition is:
 
 \[
-U_i = \frac{|\tau_i|}{\tau_{cr,i}}
-\]
-
-The display should make clear whether the current bay is below, at, or above the critical value.
-
-### 11.5 All-bay comparison
-
-While a selected bay remains the focus, the interface should include a small table comparing all bays, such as:
-
-| Bay | \(a/b\) | Curve | \(K\) | \(\tau\) | \(\tau_{cr}\) | Utilization |
-|---|---:|---|---:|---:|---:|---:|
-| Bay 1 | ... | ... | ... | ... | ... | ... |
-| Bay 2 | ... | ... | ... | ... | ... | ... |
-
-The selected bay remains highlighted.
-
----
-
-## 12. Association Between Loads and Bays
-
-### 12.1 Association rule
-
-An external load is considered associated with a bay when the load is applied at any outer-boundary vertex that bounds that bay.
-
-### 12.2 Shared vertex
-
-If a loaded outer-boundary vertex belongs to two bays, the same load is associated with both bays.
-
-Because the two bays may have different:
-
-- shear flows;
-- dimensions;
-- aspect ratios;
-- selected curves;
-- interpolated \(K\) values;
-
-that one external load may produce two different bay-specific critical-load results.
-
-### 12.3 Global versus bay-specific behavior
-
-The global shear-flow solution always considers the entire structure and every external load.
-
-The association rule is used specifically to determine whether a unique bay-level maximum-load calculation is allowed.
-
----
-
-## 13. Maximum External Load Calculation
-
-### 13.1 Exactly one load associated with the selected bay
-
-If exactly one external load is associated with the selected bay, the software may calculate that load’s critical value.
-
-If the shear flow is linear in the external load \(P\), for example:
-
-\[
-q_i(P) = \alpha_i P
-\]
-
-then the limiting condition is:
-
-\[
-\frac{|q_i(P_{cr})|}{t} = \tau_{cr,i}
+\boxed{\left|\frac{\alpha_iP_{cr,i}+q_{i,0}}{t}\right|=\tau_{cr,i}}
 \]
 
 or:
 
 \[
-\frac{|\alpha_i P_{cr}|}{t}
-=
-K_iE\left(\frac{t}{b_i}\right)^2
+|\alpha_iP_{cr,i}+q_{i,0}|=t\tau_{cr,i}
 \]
 
-The software solves this equation for the bay-specific maximum external load \(P_{cr}\).
-
-### 13.2 Multiple loads associated with the same bay
-
-If two or more external loads are associated with the selected bay, the software must **not** calculate individual maximum load values.
-
-For example, if:
+Candidate roots are:
 
 \[
-q_i = \alpha_i P_1 + \beta_i P_2
+P_{cr,i}^{(+)}=\frac{t\tau_{cr,i}-q_{i,0}}{\alpha_i}
 \]
-
-then imposing:
 
 \[
-\frac{|q_i|}{t} = \tau_{cr,i}
+P_{cr,i}^{(-)}=\frac{-t\tau_{cr,i}-q_{i,0}}{\alpha_i}
 \]
 
-provides a relationship between \(P_1\) and \(P_2\), but not a unique value for each load without an additional load relationship.
+Retain only the smallest positive root consistent with the user-defined tension/compression sense and loading direction.
 
-The MVP will not create a load envelope or solve arbitrary load combinations.
+### 15.3 Proportional single-load case
 
-In this case, the tool still reports:
+If `q_i,0=0`:
 
-- current \(q_i\);
-- current \(\tau_i\);
-- \(\tau_{cr,i}\);
+\[
+q_i=\alpha_iP
+\]
+
+and:
+
+\[
+\boxed{P_{cr,i}=\frac{t\tau_{cr,i}}{|\alpha_i|}}
+\]
+
+Substituting the critical stress:
+
+\[
+\boxed{P_{cr,i}=\frac{K_iEt^3}{|\alpha_i|b_i^2}}
+\]
+
+This expression shows the simplified sensitivity:
+
+- proportional to `K`;
+- proportional to `E`;
+- proportional to `t^3`;
+- inversely proportional to `b^2`;
+- inversely proportional to the load-to-shear-flow coefficient magnitude.
+
+### 15.4 Zero influence
+
+If `alpha_i=0`, do not divide by zero or report infinite capacity. Display:
+
+> The selected external load has zero calculated influence on the shear flow of this bay under the current model.
+
+### 15.5 Multiple associated loads
+
+If more than one load is associated with the selected bay:
+
+\[
+q_i=\sum_j\alpha_{ij}P_j
+\]
+
+The critical boundary is:
+
+\[
+\boxed{\left|\sum_j\alpha_{ij}P_j\right|=t\tau_{cr,i}}
+\]
+
+This is a load-combination relationship, not a unique value for each load. Therefore, the MVP does not calculate individual maximum loads.
+
+It still reports:
+
+- current `q_i`;
+- current `tau_i`;
+- `tau_cr,i`;
 - utilization;
-- a clear explanation that a unique maximum external load is unavailable because multiple loads are associated with the bay.
+- reserve factor;
+- an explanation that the individual maximum loads are not unique.
 
 Suggested message:
 
-> **Critical load calculation not available:** More than one external load is associated with this bay. The critical buckling stress and current utilization are still provided.
+> **Critical load calculation unavailable:** More than one external load is associated with this bay. The current stress, critical stress, utilization, and reserve factor are still reported.
 
-### 13.3 Loads associated with different bays
-
-Multiple external loads do not inherently prevent the critical-load calculation when each selected bay has only one associated external load.
-
-The uniqueness rule is evaluated separately for each bay selected by the user.
-
-### 13.4 Scope limitation
-
-The MVP is not a general load-envelope solver and does not calculate independent allowable combinations of several variable external loads.
+Multiple loads applied to different bays are allowed. The uniqueness rule is evaluated independently for the selected bay.
 
 ---
 
-## 14. Results Visualization
+## 16. Normal-load diagrams
 
-### 14.1 Geometry view
+### 16.1 User selection
 
-After solving, the geometry view should display:
+After solving, the user selects one boundary/stiffener. The tool plots the normal-load diagram only for the selected boundary.
 
-- bay numbers;
+### 16.2 Calculation basis
+
+The diagram depends only on:
+
+- geometry;
 - supports;
 - external loads;
-- load arrows and tension/compression direction;
-- shear-flow arrows;
-- shear-flow numerical values;
-- a sign-convention legend;
-- the currently selected bay highlighted.
+- calculated shear flows;
+- equilibrium.
 
-### 14.2 Safety visualization
+It does not depend on stiffener area or inertia in the MVP.
 
-The results should combine:
+### 16.3 Differential equilibrium
 
-- exact engineering values; and
-- a simple visual indication of utilization or criticality.
+For local coordinate `x` along boundary `s`:
 
-A color approach may indicate safe, warning, and governing/critical conditions, but numerical values must always remain available.
+\[
+\boxed{\frac{dN_s}{dx}=p_s(x)}
+\]
 
-### 14.3 Normal-load view
+where `p_s(x)` is the signed resultant line loading induced by adjacent shear flows.
 
-The user selects a boundary and sees the corresponding normal-load diagram and equations.
+For constant adjacent shear flows over a segment, a generic expression is:
 
-### 14.4 Buckling-curve view
+\[
+p_s=q_{\text{left}}-q_{\text{right}}
+\]
 
-The user selects a bay and sees the chart, selected curve, current \(a/b\), interpolation point, \(K\), stresses, utilization, and maximum load when applicable.
+with signs generated from the adopted arrow convention. Then:
+
+\[
+\boxed{N_s(x)=N_s(x_0)+p_s(x-x_0)}
+\]
+
+Thus, `N(x)` is linear over a region with constant shear flows.
+
+At a permitted external load vertex, the diagram may have a jump equal to the signed load component along the selected boundary direction.
+
+For consecutive pieces:
+
+\[
+N_s^{(k+1)}(x_k^+)=N_s^{(k)}(x_k^-)+\Delta N_k
+\]
+
+where `Delta N_k` is the signed concentrated action at the vertex.
+
+### 16.4 Output
+
+Display:
+
+- local coordinate origin and direction;
+- positive normal-load convention;
+- every piecewise `N(x)` equation;
+- key values;
+- values immediately before and after jumps;
+- maximum and minimum normal load;
+- plotted engineering diagram;
+- contributing shear-flow terms.
+
+The sign of `q_left-q_right` must come from the actual orientation and equilibrium, not merely from visual left/right screen position.
 
 ---
 
-## 15. Solve Workflow
+## 17. Equilibrium and solver checks
 
-The tool must use an explicit **Solve** button.
+### 17.1 Global forces
 
-Edits do not automatically trigger a complete recalculation.
+\[
+\sum F_x=0
+\]
 
-The intended workflow is:
+\[
+\sum F_y=0
+\]
 
-1. Draw the panel layout.
-2. Let the software detect vertices, boundaries, and bays.
-3. Enter width and height for each bay.
-4. Define the global material.
-5. Define the global skin thickness.
-6. Apply supports to allowed outer-boundary vertices.
-7. Apply external loads to allowed outer-boundary vertices.
-8. Select a buckling curve for each bay.
-9. Press **Solve**.
-10. Review validation messages, shear flows, normal-load diagrams, and stability results.
-11. Export the full PDF engineering report.
+### 17.2 Global moments
 
----
+\[
+\sum M_O=0
+\]
 
-## 16. Model Validation Rules
+about a defined reference point `O`.
 
-The software must validate the model before solving.
+### 17.3 Local equilibrium
 
-### 16.1 Geometry validation
+At relevant vertices and boundary segments, internal force resultants, support reactions, and applied loads must balance within tolerance.
 
-Reject the model if:
+### 17.4 Linear-system residual
 
-- more than one disconnected structure exists;
-- a bay is open;
-- a bay is not rectangular or square;
-- a bay has a slanted or curved boundary;
-- a boundary intersection creates unsupported topology;
-- required bay dimensions are missing or invalid.
+For:
 
-### 16.2 Load validation
+\[
+\mathbf{Aq}=\mathbf{b}
+\]
 
-Reject or prevent:
+calculate:
 
-- a load at an internal intersection;
-- a load in the middle of a boundary;
-- a load at a support vertex;
-- an arbitrary angled load;
-- a distributed load;
-- an applied moment;
-- a load without magnitude or tension/compression definition.
+\[
+\mathbf{r}=\mathbf{Aq}-\mathbf{b}
+\]
 
-### 16.3 Support validation
+and a normalized residual such as:
 
-Reject or prevent:
+\[
+\epsilon_r=\frac{\|\mathbf{r}\|_2}{\max(\|\mathbf{b}\|_2,1)}
+\]
 
-- a support at an internal vertex;
-- a support at a vertex containing a load;
-- an invalid or insufficient support configuration that prevents a stable equilibrium solution.
+Do not release results if the residual exceeds the validated tolerance.
 
-### 16.4 Property validation
+### 17.5 Stability checks
 
-Reject or warn about:
+Detect:
 
-- nonpositive thickness;
-- nonpositive Young’s modulus;
-- missing material data;
-- nonpositive bay width or height;
-- missing curve selection;
-- an \(a/b\) value outside the digitized range of the selected curve.
-
-For an aspect ratio outside the curve range, the MVP should not silently extrapolate unless extrapolation is explicitly validated by the source methodology.
-
-### 16.5 Solver validation
-
-The solver should detect and report:
-
+- insufficient or unstable supports;
+- singular equations;
 - inconsistent equations;
-- underdetermined shear-flow systems;
-- singular or unstable support configurations;
-- equilibrium residuals above the accepted numerical tolerance;
-- missing normal-load paths;
-- cases in which a unique maximum load cannot be calculated.
+- underdetermined shear flows;
+- missing dimensions;
+- missing material properties;
+- missing curve selection;
+- aspect ratios outside curve range;
+- zero thickness;
+- nonpositive modulus;
+- load-support conflict.
 
 ---
 
-## 17. PDF Engineering Report
+## 18. Stability user interface
 
-The MVP must export a **full engineering report in PDF format**.
+The stability module is bay-centric.
 
-The PDF is a core deliverable because the calculation must be reviewable and traceable.
+The user chooses a bay from a dropdown. The geometry highlights that bay.
 
-### 17.1 Model description
+Always show for the selected bay:
 
-Include:
+- Bay ID;
+- width and height;
+- normalized `a` and `b`;
+- `a/b`;
+- selected curve;
+- interpolated `K`;
+- signed `q`;
+- actual `tau=q/t`;
+- critical `tau_cr`;
+- utilization;
+- reserve factor;
+- critical external load when uniquely available.
 
-- project/model title;
-- panel geometry;
-- bay numbering;
-- width and height of every bay;
+Also show a compact table comparing all bays.
+
+---
+
+## 19. Results visualization
+
+After pressing Solve, show:
+
+- model geometry;
+- Bay numbers;
+- supports;
+- load arrows;
+- tension/compression sense;
+- signed shear-flow values;
+- shear-flow arrows;
+- sign-convention legend;
+- selected Bay highlight;
+- utilization/criticality colors plus exact values;
+- normal-load plot for a selected boundary;
+- `K` curve graph and interpolation point.
+
+Colors supplement numerical values. Colors do not replace numerical results.
+
+---
+
+## 20. Solve workflow
+
+1. Draw one connected orthogonal panel layout.
+2. Automatically detect vertices, boundaries, and Bays.
+3. Enter width and height for every Bay.
+4. Select or define the global material.
+5. Enter global skin thickness.
+6. Apply supports only to outer-boundary vertices.
+7. Apply loads only to different outer-boundary vertices.
+8. Select the buckling curve for every Bay.
+9. Press **Solve**.
+10. Validate geometry, supports, loads, properties, and equation solvability.
+11. Solve reactions and global shear flow.
+12. Check equilibrium residuals.
+13. Plot shear flow.
+14. Plot a selected normal-load diagram.
+15. Calculate Bay stability results.
+16. Calculate Bay-specific critical load only when unique.
+17. Export the engineering report.
+
+The software does not automatically re-solve while editing. An explicit Solve button is required.
+
+---
+
+## 21. Validation rules
+
+### Geometry
+
+Reject:
+
+- disconnected geometry;
+- open Bays;
+- nonrectangular Bays;
+- inclined or curved lines;
+- invalid intersections;
+- missing Bay dimensions.
+
+### Loads
+
+Reject:
+
+- internal loads;
+- loads at segment midpoints;
+- loads inside Bays;
+- loads on supports;
+- arbitrary angles;
+- distributed loads;
+- moments;
+- missing magnitude or tension/compression setting.
+
+### Supports
+
+Reject:
+
+- internal supports;
+- supports on loaded vertices;
+- support arrangements that leave the model unstable.
+
+### Properties
+
+Reject or warn:
+
+- `t <= 0`;
+- `E <= 0`;
+- invalid Poisson's ratio;
+- Bay width or height `<= 0`;
+- missing curve selection;
+- `a/b` outside the verified curve range.
+
+Do not silently extrapolate the curves.
+
+---
+
+## 22. Full PDF engineering report
+
+The report includes:
+
+### Model description
+
+- model title;
+- geometry;
+- Bay numbering;
+- width and height of every Bay;
+- normalized `a` and `b`;
+- material;
+- `E` and `nu`;
 - global thickness;
-- material and properties;
 - supports;
 - external loads;
 - sign conventions.
 
-### 17.2 Shear-flow analysis
+### Shear-flow analysis
 
-Include:
+- equilibrium equations;
+- reactions;
+- shear-flow equations and results;
+- diagram with arrows and values;
+- residual check;
+- intermediate steps when detailed calculations are enabled.
 
-- shear-flow diagram;
-- arrows indicating flow direction;
-- numerical values;
-- sign-convention legend;
-- equilibrium equations and intermediate calculations when detailed-calculation mode is enabled.
+### Normal-load analysis
 
-### 17.3 Normal-load analysis
+For the selected boundary:
 
-For the structural boundary selected for reporting, include:
+- coordinate convention;
+- contributing shear flows;
+- piecewise `N(x)` equations;
+- diagram;
+- maximum and minimum values.
 
-- boundary identifier;
-- normal-load equation \(N(x)\);
-- piecewise equations if applicable;
-- normal-load diagram;
-- maximum and minimum values;
-- detailed derivation when requested.
+### Stability analysis
 
-### 17.4 Stability analysis
+For every Bay:
 
-For every bay, include:
-
-- bay identifier;
-- width \(b\);
-- height \(a\);
-- \(a/b\);
-- selected curve;
-- interpolated \(K\);
-- shear flow \(q\);
-- actual stress \(\tau=q/t\);
-- critical buckling stress \(\tau_{cr}\);
+- dimensions;
+- `a/b`;
+- selected curve and its meaning;
+- interpolation points;
+- interpolated `K`;
+- `q`;
+- `tau=q/t`;
+- `tau_cr=K E (t/b)^2`;
 - utilization;
-- maximum external load, when uniquely calculable;
-- explanation when the maximum load is unavailable.
+- reserve factor;
+- critical load when unique;
+- explanation when unavailable.
 
-### 17.5 Buckling chart
+### Curve chart
 
-Include:
-
-- the reference \(K\) versus \(a/b\) chart;
+- all embedded curves;
 - curve descriptions;
-- selected curve for the relevant bay;
-- interpolation point.
+- selected curve;
+- current aspect-ratio marker;
+- interpolated point;
+- equation convention.
 
-### 17.6 Conclusions
+### Conclusions
 
-Include:
-
-- the selected bay result;
-- a comparison of all bays;
-- the most highly utilized bay under the current load case;
-- any bay-specific critical external loads that were uniquely calculated;
-- limitations or validation warnings applicable to the analysis.
+- selected Bay result;
+- comparison of all Bays;
+- highest current utilization;
+- every uniquely calculated Bay-specific critical load;
+- warnings and limitations.
 
 ---
 
-## 18. Explicit MVP Exclusions
+## 23. Course topics intentionally excluded from MVP
 
-The first version will not include:
+### Compressed-plate buckling
 
-- finite element meshing;
-- full FEA;
+The theory also treats plates under direct compression and explains the effect of edge restraint, Poisson coupling, and the number of buckling waves. The MVP focuses on shear flow and critical shear buckling.
+
+### Curved panels
+
+Curved panels can have different or higher buckling resistance than flat panels and require curvature-dependent terms. The MVP supports flat panels only.
+
+### Post-buckling behavior
+
+After shear buckling, stresses may redistribute and diagonal tension can develop. This changes loads in the surrounding reinforcements. The MVP stops at first elastic buckling and claims no post-buckling reserve.
+
+### Stiffener stability
+
+Real stiffeners can require Euler-column buckling checks and effective-length assumptions. The MVP has no stiffener area or inertia, so this is excluded.
+
+### Stiffener deformability
+
+Flexible reinforcements can alter the pure-shear model and the post-buckling diagonal-tension angle. The MVP assumes rigid idealized boundaries in the pre-buckling regime.
+
+### Inelastic effects
+
+Plastic buckling, crushing, yielding, and material failure are excluded.
+
+---
+
+## 24. Explicit MVP exclusions
+
+- FEA and meshing;
 - geometric or material nonlinearity;
-- contact;
-- local stress concentrations;
 - plasticity;
+- contact;
+- stress concentrations;
+- imperfections;
 - post-buckling reserve;
+- diagonal-tension post-buckling calculation;
+- stiffener area, inertia, and section shapes;
+- stiffener Euler buckling;
 - crippling;
-- Euler buckling of stiffeners;
-- stiffener area or inertia inputs;
-- stiffener section libraries;
-- separate materials by bay;
-- separate thicknesses by bay;
-- tapered skins;
-- arbitrary panel shapes;
-- angled boundaries;
+- curved panels;
+- variable thickness;
+- multiple materials;
+- arbitrary Bay shapes;
 - interior loads;
 - distributed loads;
-- applied moments;
-- arbitrary load directions;
-- supports at internal vertices;
-- loads at support vertices;
-- multiple disconnected structures;
-- general load-envelope calculation;
+- moments;
+- arbitrary load angles;
+- internal supports;
+- load and support on the same vertex;
+- disconnected structures;
+- general multidimensional load envelopes;
 - optimization;
-- automated design modification suggestions;
-- trade-off automation in the initial MVP;
-- custom bay names;
-- spreadsheet export.
+- automatic design suggestions;
+- custom Bay names;
+- Excel export.
 
 ---
 
-## 19. Potential Phase 2 Features
+## 25. Possible Phase 2 features
 
-Possible future additions include:
-
-- rapid trade-off comparison between panel layouts;
-- automated suggestions to add boundaries or change dimensions;
-- separate thickness per bay;
+- configuration trade-off studies;
+- native project saving and reopening;
+- variable thickness by Bay;
 - material zones;
 - stiffener section properties;
 - Euler buckling of stiffeners;
-- combined skin and stiffener failure modes;
-- compression buckling if distinct from the current shear-buckling methodology;
-- combined compression and shear interaction;
-- post-buckling behavior;
-- crippling;
-- variable-load scaling or load-envelope analysis;
+- compression and shear interaction;
+- post-buckling diagonal tension;
+- curved panels;
+- verified alternative curve families;
+- automated curve selection from boundary conditions;
+- multiple-load scaling and load envelopes;
 - Excel export;
-- reusable native project files, if not included in the first implementation;
-- automatic curve selection from physical edge conditions;
-- additional verified curve families.
+- optimization and design suggestions.
 
 ---
 
-## 20. Important Technical Validations Before Implementation
+## 26. Required embedded data before release
 
-The conceptual scope is well defined, but several equations and conventions must be verified before coding.
+To eliminate dependence on the external PDF, the deliverable must include:
 
-### 20.1 Confirm the type of buckling curves
+1. this self-contained equation set;
+2. symbol and unit definitions;
+3. the verified meaning of every curve;
+4. digitized `(a/b,K)` points for all four curves;
+5. valid range for each curve;
+6. equation convention for each curve;
+7. interpolation and out-of-range rules;
+8. shear-flow sign convention;
+9. normal-force sign convention;
+10. at least one verified complete example;
+11. solver tolerances;
+12. engineering limitations.
 
-Verify whether the Aula 7 curves are:
+The approximate numerical curve points are embedded in Section 31. Because these values were digitized from an image, they must remain labeled as approximate and should be independently checked before engineering release.
 
-- shear-buckling curves;
-- compression-buckling curves; or
-- another class of stability curves.
+---
 
-This determines whether comparing \(q/t\) directly with the critical value from the chart is correct.
+## 27. Minimum acceptance tests
 
-### 20.2 Confirm the exact critical-stress equation
+### Test A: aspect ratio
 
-Verify the full equation, including:
-
-- constants;
-- units;
-- the role of Poisson’s ratio;
-- definitions of \(a\) and \(b\);
-- whether \(b\) must be the shorter side;
-- edge-condition assumptions;
-- applicability limits.
-
-The simplified expression discussed was:
+For width 400 mm and height 600 mm:
 
 \[
-\tau_{cr}=K E\left(\frac{t}{b}\right)^2
+a=600\ \mathrm{mm},\quad b=400\ \mathrm{mm},\quad a/b=1.5
 \]
 
-but this must not be implemented until confirmed against Aula 7.
+### Test B: interpolation
 
-### 20.3 Digitize the curves
+For tabulated points `(1.0,K1)` and `(2.0,K2)`, the result at `a/b=1.5` must equal the midpoint between `K1` and `K2`.
 
-The four \(K\) versus \(a/b\) curves need verified numerical data.
+### Test C: shear stress
 
-The implementation should define:
+For:
 
-- tabulated curve points;
-- interpolation method;
-- curve-domain limits;
-- behavior at exact data points;
-- behavior outside the valid domain;
-- numerical tolerance.
+\[
+q=100\ \mathrm{N/mm},\quad t=2\ \mathrm{mm}
+\]
 
-### 20.4 Validate the global shear-flow formulation
+verify:
 
-The equilibrium formulation must be validated using known hand-calculation examples from Aula 7.
+\[
+\tau=50\ \mathrm{MPa}
+\]
 
-Validation should cover:
+### Test D: utilization
 
-- one bay;
-- multiple connected bays;
-- shared boundaries;
-- multiple outer-boundary loads;
-- different support arrangements;
-- shear-flow signs and directions;
-- normal-load reconstruction;
-- equilibrium residuals.
+For:
 
-### 20.5 Confirm “one shear flow per bay”
+\[
+\tau=50\ \mathrm{MPa},\quad \tau_{cr}=100\ \mathrm{MPa}
+\]
 
-The precise meaning and limits of one shear-flow result/model per bay should be confirmed from the reference methodology, especially where a bay has multiple boundary segments and shares internal boundaries with adjacent bays.
+verify:
 
-### 20.6 Define load association precisely
+\[
+U=0.5,\quad RF=2.0
+\]
 
-The agreed user-facing rule is geometric: a load is associated with a bay if the loaded outer-boundary vertex bounds that bay.
+### Test E: one-load critical result
 
-The implementation must preserve the separation between:
+For `q=alpha P`, substitute the calculated critical load and verify:
 
-- global influence of loads in the complete equilibrium solution; and
-- bay-level association used to decide whether a unique \(P_{cr}\) may be reported.
+\[
+|q(P_{cr})|/t=\tau_{cr}
+\]
 
----
+within tolerance.
 
-## 21. Consolidated MVP Definition
+### Test F: multiple associated loads
 
-The MVP is:
+Verify that the software provides current stress, critical stress, utilization, and reserve factor but does not report individual critical loads.
 
-> A simplified aircraft-style stiffened-panel analysis workbench in which the engineer draws one connected orthogonal panel layout, enters each rectangular bay’s width and height, defines one global material and skin thickness, applies tension or compression loads and supports only at separate outer-boundary vertices, solves the global shear-flow distribution, plots a selected boundary’s normal-load diagram, and performs bay-by-bay buckling verification using a user-selected \(K\) versus \(a/b\) curve. A bay-specific maximum external load is calculated only when exactly one external load is associated with that bay. The tool provides transparent calculations and exports a full PDF engineering report.
+### Test G: load-support conflict
 
----
+Verify that loads on fixed, pinned, or roller support vertices block the solve.
 
-## 22. Decisions Log
+### Test H: global equilibrium
 
-The following choices were explicitly made during brainstorming:
+Verify force and moment equilibrium and the linear-system residual.
 
-- Primary purpose: verify an existing stiffened panel and determine stability limits.
-- Secondary future purpose: quick configuration trade-off studies.
-- Structural context: simplified aircraft-style panels.
-- User experience: graphical panel drawing, not a generic form or FEM model builder.
-- Geometry creation: draw panel boundaries/internal divisions; automatic vertices, boundaries, connectivity, and bays.
-- Bay shape: rectangular/square only.
-- Bay orientation: horizontal/vertical sides only.
-- Dimensions: width and height entered per bay.
-- Structure count: one connected structure only.
-- Stiffeners: geometric lines only, no section properties.
-- Analytical approach: boom-skin idealization.
-- Skin role: carries shear flow.
-- Thickness: one global value.
-- Material: one global material, selectable from a library or custom.
-- Loads: multiple loads allowed globally.
-- Load locations: outer-boundary vertices only.
-- Load definition: magnitude plus tension/compression; horizontal or vertical according to the selected external boundary.
-- Internal loads: prohibited.
-- Supports: fixed, pinned, or roller.
-- Support locations: outer-boundary vertices only.
-- Load and support on the same vertex: prohibited for all support types, including fixed nodes.
-- Shear-flow solution: global, not purely local.
-- Shear-flow solver: automatic with optional detailed equations.
-- Shear-flow display: values, arrows, and sign-convention legend.
-- Normal-load diagram: generated on demand for a user-selected boundary.
-- Buckling: bay-centered.
-- Curve selection: one of approximately four curves selected per bay.
-- Curve UI: dropdown plus chart and explanatory text.
-- \(K\): computed by interpolation using the calculated \(a/b\).
-- Bay selection: dropdown.
-- Bay display: selected-bay details plus compact all-bay comparison.
-- Selected bay: highlighted in the geometry.
-- Critical stress: always calculated for the selected bay.
-- Maximum external load: calculated only when exactly one load is associated with the selected bay.
-- Multiple loads associated with one bay: no unique maximum-load result in the MVP.
-- Solve behavior: explicit Solve button.
-- Export: full PDF engineering report.
+### Test I: normal-load diagram
+
+For constant net line loading `p_s`, verify that `N(x)` is linear and that its slope equals `p_s`.
+
+### Test J: curve convention
+
+Verify that the program uses either:
+
+\[
+\tau_{cr}=K E(t/b)^2
+\]
+
+or the alternative explicit plate constant convention, but never multiplies both normalizations together.
 
 ---
 
-## 23. Next Recommended Project Step
+## 28. Final self-contained calculation sequence
 
-Before selecting the software platform or beginning UI development, the next technical checkpoint should be to extract and verify the Aula 7 methodology:
+1. Validate connected orthogonal geometry.
+2. Detect Bays, boundaries, and vertices.
+3. Classify outer-boundary and internal vertices.
+4. Receive every Bay's width and height.
+5. Normalize `a` and `b`.
+6. Receive global material and thickness.
+7. Receive outer-boundary supports.
+8. Receive outer-boundary loads.
+9. reject all load-support overlaps.
+10. Build the global equilibrium equations.
+11. Solve support reactions and global shear flows.
+12. Check force, moment, local, and residual equilibrium.
+13. Display signed shear flows and directions.
+14. Build the selected boundary's normal-load diagram.
+15. Calculate every Bay's `a/b`.
+16. Interpolate `K` from the Bay's selected embedded curve.
+17. Calculate `tau_cr=K E (t/b)^2`.
+18. Calculate `tau=q/t`.
+19. Calculate utilization and reserve factor.
+20. Determine the loads associated with the selected Bay.
+21. If exactly one is associated, solve its critical magnitude.
+22. If more than one is associated, suppress individual maximum-load results.
+23. Show full selected-Bay details and all-Bay comparison.
+24. Export the full PDF engineering report.
 
-1. transcribe the exact equations;
-2. identify the meaning of all four curves;
-3. digitize the curves;
-4. define the interpolation rules;
-5. reproduce at least one complete hand-worked example;
-6. confirm the shear-flow and normal-load equations;
-7. use that example as the first solver acceptance test.
+---
 
-This validation should precede implementation because the largest remaining project risk is the mathematical interpretation of the reference method, not the graphical interface.
+## 29. Engineering disclaimer for the application
+
+> This tool performs a simplified linear-elastic analysis of flat, rectangular, thin-skinned stiffened panels. Results represent idealized pre-buckling shear flow, normal-load equilibrium, and first elastic shear-buckling estimates. The model does not include imperfections, yielding, plastic buckling, post-buckling strength, stiffener deformability, stiffener buckling, curved-panel effects, local stress concentrations, or certification factors. Engineering judgment and independent verification are required.
+
+---
+
+## 30. Frozen decisions log
+
+- Existing-panel verification is the primary use.
+- Trade-off studies are a future secondary use.
+- Aircraft-style simplified panels are the target.
+- User draws boundaries and internal divisions only.
+- The software creates vertices, connectivity, stiffeners, and Bays automatically.
+- One connected structure only.
+- Rectangular/square orthogonal Bays only.
+- User enters width and height for every Bay.
+- Stiffeners are geometric lines only.
+- Boom-skin style analytical idealization.
+- Skin carries shear flow.
+- One global material, library or custom.
+- One global thickness.
+- Multiple external loads allowed globally.
+- Loads only at outer-boundary vertices.
+- Loads defined by magnitude and tension/compression.
+- Horizontal or vertical load direction only.
+- Supports only at outer-boundary vertices.
+- Fixed, pinned, and roller supports.
+- A node can never contain both a support and a load.
+- Global shear-flow solution.
+- Automatic equations plus optional detailed-calculation mode.
+- Shear-flow values, arrows, and sign legend.
+- Normal-load diagram generated for a user-selected boundary.
+- Stability analysis selected by Bay dropdown.
+- Selected Bay highlighted.
+- One buckling curve selected per Bay.
+- Dropdown plus visible chart and curve explanation.
+- `K` calculated from `a/b` by interpolation.
+- Full selected-Bay results plus compact all-Bay comparison.
+- Actual stress is `q/t`.
+- Critical stress uses the curve-compatible equation `K E (t/b)^2`.
+- Maximum external load calculated only for a Bay with exactly one associated load.
+- Multiple associated loads suppress the scalar maximum-load result.
+- Explicit Solve button.
+- Full engineering PDF report.
+
+
+---
+
+## 31. Embedded Digitized K-Curve Dataset
+
+### 31.1 Status and intended use
+
+The following dataset contains **100 aspect-ratio points for each of the four curves**, for a total of **400 digitized K values**. The common aspect-ratio axis ranges from \(a/b=1.000\) to \(a/b=7.500\).
+
+> **Important accuracy notice:** These values are approximate points digitized from a graph. They are not original tabulated values published by the source. They are suitable for approximate implementation and interpolation of the displayed curves, but they must not be represented as exact source data or used as the sole basis for certification-level structural design.
+
+The four series have the following approximate behavior:
+
+- **K1:** starts near 12.30 and approaches approximately 8.50.
+- **K2:** starts near 10.80 and approaches approximately 8.45.
+- **K3:** starts near 8.30 and approaches approximately 5.33.
+- **K4:** starts near 7.95 and approaches approximately 5.05.
+
+The curve names `K1` through `K4` remain provisional identifiers until their exact physical edge-restraint descriptions are independently verified.
+
+### 31.2 Mandatory interpolation rule
+
+For an input ratio \(r=a/b\) that exactly matches a tabulated ratio, the software returns the corresponding tabulated \(K\) value.
+
+For any input ratio between two consecutive tabulated points \((r_j,K_j)\) and \((r_{j+1},K_{j+1})\), the software must use **piecewise linear interpolation** on the user-selected curve:
+
+\[
+oxed{
+K(r)=K_j+rac{r-r_j}{r_{j+1}-r_j}\left(K_{j+1}-K_j
+ight)
+}
+\]
+
+This interpolation is performed independently for `K1`, `K2`, `K3`, or `K4`, according to the curve selected for the bay.
+
+Rules:
+
+1. The valid embedded-data interval is \(1.000\leq a/b\leq7.500\).
+2. Exact tabulated inputs return exact stored values.
+3. Inputs strictly between adjacent points use linear interpolation.
+4. The software must not silently extrapolate below 1.000 or above 7.500.
+5. An out-of-range value must produce a blocking validation message unless a future, separately validated extrapolation policy is introduced.
+6. Detailed-calculation mode must show the selected curve, bounding points, interpolation fraction, and resulting \(K\).
+7. Internal calculations should retain more precision than the displayed two-decimal K values when such precision exists in the stored dataset. With the present dataset, the stored K precision is two decimals.
+
+Suggested out-of-range message:
+
+> **Aspect ratio outside curve range:** The embedded digitized curves are valid only for \(1.000\leq a/b\leq7.500\). Revise the bay dimensions or provide a separately validated coefficient.
+
+### 31.3 Dataset
+
+| Point | a/b | K1 | K2 | K3 | K4 |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 1.000 | 12.30 | 10.80 | 8.30 | 7.95 |
+| 2 | 1.066 | 12.10 | 10.75 | 8.22 | 7.82 |
+| 3 | 1.131 | 11.91 | 10.70 | 8.14 | 7.69 |
+| 4 | 1.197 | 11.71 | 10.65 | 8.05 | 7.56 |
+| 5 | 1.263 | 11.53 | 10.57 | 7.95 | 7.39 |
+| 6 | 1.328 | 11.37 | 10.49 | 7.85 | 7.21 |
+| 7 | 1.394 | 11.20 | 10.41 | 7.77 | 7.06 |
+| 8 | 1.460 | 11.05 | 10.32 | 7.67 | 6.89 |
+| 9 | 1.525 | 10.85 | 10.22 | 7.58 | 6.75 |
+| 10 | 1.591 | 10.70 | 10.14 | 7.47 | 6.59 |
+| 11 | 1.657 | 10.55 | 10.05 | 7.36 | 6.45 |
+| 12 | 1.722 | 10.31 | 9.87 | 7.25 | 6.33 |
+| 13 | 1.788 | 10.18 | 9.78 | 7.17 | 6.22 |
+| 14 | 1.854 | 10.05 | 9.69 | 7.08 | 6.13 |
+| 15 | 1.919 | 9.88 | 9.55 | 6.96 | 6.00 |
+| 16 | 1.985 | 9.76 | 9.42 | 6.86 | 5.92 |
+| 17 | 2.051 | 9.72 | 9.39 | 6.83 | 5.87 |
+| 18 | 2.116 | 9.66 | 9.36 | 6.79 | 5.84 |
+| 19 | 2.182 | 9.59 | 9.32 | 6.73 | 5.78 |
+| 20 | 2.247 | 9.54 | 9.28 | 6.66 | 5.74 |
+| 21 | 2.313 | 9.47 | 9.24 | 6.59 | 5.69 |
+| 22 | 2.379 | 9.39 | 9.20 | 6.51 | 5.65 |
+| 23 | 2.444 | 9.33 | 9.16 | 6.43 | 5.61 |
+| 24 | 2.510 | 9.27 | 9.10 | 6.35 | 5.55 |
+| 25 | 2.576 | 9.22 | 9.06 | 6.29 | 5.51 |
+| 26 | 2.631 | 9.18 | 9.03 | 6.25 | 5.48 |
+| 27 | 2.697 | 9.13 | 9.00 | 6.20 | 5.45 |
+| 28 | 2.763 | 9.08 | 8.96 | 6.15 | 5.42 |
+| 29 | 2.828 | 9.05 | 8.93 | 6.10 | 5.39 |
+| 30 | 2.894 | 9.00 | 8.89 | 6.06 | 5.36 |
+| 31 | 2.960 | 8.99 | 8.89 | 6.03 | 5.35 |
+| 32 | 3.025 | 8.98 | 8.88 | 5.98 | 5.32 |
+| 33 | 3.091 | 8.96 | 8.86 | 5.95 | 5.29 |
+| 34 | 3.157 | 8.94 | 8.84 | 5.92 | 5.27 |
+| 35 | 3.222 | 8.93 | 8.83 | 5.89 | 5.25 |
+| 36 | 3.288 | 8.91 | 8.81 | 5.86 | 5.23 |
+| 37 | 3.354 | 8.89 | 8.79 | 5.83 | 5.21 |
+| 38 | 3.419 | 8.88 | 8.77 | 5.80 | 5.19 |
+| 39 | 3.485 | 8.86 | 8.76 | 5.78 | 5.17 |
+| 40 | 3.551 | 8.84 | 8.74 | 5.75 | 5.15 |
+| 41 | 3.616 | 8.83 | 8.73 | 5.72 | 5.14 |
+| 42 | 3.682 | 8.81 | 8.72 | 5.70 | 5.12 |
+| 43 | 3.747 | 8.80 | 8.71 | 5.68 | 5.11 |
+| 44 | 3.813 | 8.79 | 8.70 | 5.66 | 5.10 |
+| 45 | 3.879 | 8.78 | 8.69 | 5.64 | 5.09 |
+| 46 | 3.944 | 8.77 | 8.69 | 5.61 | 5.08 |
+| 47 | 4.010 | 8.76 | 8.68 | 5.60 | 5.08 |
+| 48 | 4.076 | 8.75 | 8.67 | 5.58 | 5.07 |
+| 49 | 4.141 | 8.74 | 8.66 | 5.56 | 5.06 |
+| 50 | 4.207 | 8.73 | 8.65 | 5.55 | 5.05 |
+| 51 | 4.273 | 8.72 | 8.64 | 5.54 | 5.05 |
+| 52 | 4.338 | 8.71 | 8.63 | 5.53 | 5.04 |
+| 53 | 4.404 | 8.70 | 8.62 | 5.52 | 5.04 |
+| 54 | 4.470 | 8.69 | 8.61 | 5.51 | 5.03 |
+| 55 | 4.535 | 8.68 | 8.60 | 5.50 | 5.03 |
+| 56 | 4.601 | 8.67 | 8.60 | 5.49 | 5.02 |
+| 57 | 4.667 | 8.66 | 8.59 | 5.48 | 5.02 |
+| 58 | 4.732 | 8.65 | 8.59 | 5.47 | 5.02 |
+| 59 | 4.798 | 8.65 | 8.58 | 5.46 | 5.01 |
+| 60 | 4.864 | 8.64 | 8.58 | 5.46 | 5.01 |
+| 61 | 4.929 | 8.63 | 8.57 | 5.45 | 5.01 |
+| 62 | 4.995 | 8.62 | 8.57 | 5.44 | 5.01 |
+| 63 | 5.061 | 8.62 | 8.57 | 5.44 | 5.01 |
+| 64 | 5.126 | 8.61 | 8.56 | 5.43 | 5.01 |
+| 65 | 5.192 | 8.61 | 8.56 | 5.43 | 5.01 |
+| 66 | 5.258 | 8.60 | 8.55 | 5.42 | 5.01 |
+| 67 | 5.323 | 8.59 | 8.55 | 5.42 | 5.01 |
+| 68 | 5.389 | 8.59 | 8.54 | 5.41 | 5.01 |
+| 69 | 5.455 | 8.58 | 8.54 | 5.41 | 5.01 |
+| 70 | 5.520 | 8.58 | 8.53 | 5.40 | 5.01 |
+| 71 | 5.586 | 8.57 | 8.53 | 5.40 | 5.01 |
+| 72 | 5.652 | 8.57 | 8.53 | 5.40 | 5.01 |
+| 73 | 5.717 | 8.56 | 8.52 | 5.39 | 5.01 |
+| 74 | 5.783 | 8.56 | 8.52 | 5.39 | 5.01 |
+| 75 | 5.848 | 8.55 | 8.51 | 5.38 | 5.02 |
+| 76 | 5.914 | 8.55 | 8.51 | 5.38 | 5.02 |
+| 77 | 5.980 | 8.55 | 8.50 | 5.38 | 5.02 |
+| 78 | 6.045 | 8.54 | 8.50 | 5.37 | 5.02 |
+| 79 | 6.111 | 8.54 | 8.50 | 5.37 | 5.02 |
+| 80 | 6.177 | 8.54 | 8.49 | 5.37 | 5.02 |
+| 81 | 6.242 | 8.53 | 8.49 | 5.36 | 5.02 |
+| 82 | 6.308 | 8.53 | 8.49 | 5.36 | 5.03 |
+| 83 | 6.374 | 8.53 | 8.48 | 5.36 | 5.03 |
+| 84 | 6.439 | 8.53 | 8.48 | 5.35 | 5.03 |
+| 85 | 6.505 | 8.52 | 8.48 | 5.35 | 5.03 |
+| 86 | 6.571 | 8.52 | 8.48 | 5.35 | 5.03 |
+| 87 | 6.636 | 8.52 | 8.47 | 5.35 | 5.03 |
+| 88 | 6.702 | 8.52 | 8.47 | 5.35 | 5.03 |
+| 89 | 6.768 | 8.51 | 8.47 | 5.34 | 5.04 |
+| 90 | 6.833 | 8.51 | 8.47 | 5.34 | 5.04 |
+| 91 | 6.899 | 8.51 | 8.46 | 5.34 | 5.04 |
+| 92 | 6.965 | 8.51 | 8.46 | 5.34 | 5.04 |
+| 93 | 7.030 | 8.51 | 8.46 | 5.34 | 5.04 |
+| 94 | 7.096 | 8.51 | 8.46 | 5.34 | 5.04 |
+| 95 | 7.162 | 8.51 | 8.46 | 5.35 | 5.05 |
+| 96 | 7.227 | 8.51 | 8.46 | 5.35 | 5.05 |
+| 97 | 7.293 | 8.51 | 8.46 | 5.34 | 5.05 |
+| 98 | 7.359 | 8.50 | 8.45 | 5.34 | 5.05 |
+| 99 | 7.434 | 8.50 | 8.45 | 5.33 | 5.05 |
+| 100 | 7.500 | 8.50 | 8.45 | 5.33 | 5.05 |
+
+
+### 31.4 Implementation pseudocode
+
+```text
+function interpolate_K(selected_curve, ratio):
+    if ratio < 1.000 or ratio > 7.500:
+        raise AspectRatioOutOfRange
+
+    if ratio exactly matches a stored a/b value:
+        return stored K for selected_curve
+
+    find consecutive rows j and j+1 such that:
+        ratio_j < ratio < ratio_j_plus_1
+
+    K_low  = K[selected_curve][j]
+    K_high = K[selected_curve][j+1]
+
+    fraction = (ratio - ratio_j) / (ratio_j_plus_1 - ratio_j)
+    K = K_low + fraction * (K_high - K_low)
+
+    return K
+```
+
+### 31.5 Interpolation output for the detailed report
+
+For traceability, the calculation report should show an interpolation block like:
+
+```text
+Selected bay: Bay 2
+Selected curve: K3
+Calculated a/b: 2.600
+Lower point:  a/b = 2.576, K3 = 6.29
+Upper point:  a/b = 2.631, K3 = 6.25
+Interpolation fraction: (2.600 - 2.576) / (2.631 - 2.576)
+Interpolated K3: 6.2725
+```
+
+The values above illustrate the method. The application must calculate the final result from the stored data without prematurely rounding intermediate calculations.
